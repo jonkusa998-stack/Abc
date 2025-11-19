@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>School Cloud 4.0</title>
+    <!-- ПОДКЛЮЧАЕМ TELEGRAM API -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: #121212;
+            --surface: #242424;
+            --primary: #8774e1; 
+            --secondary: #00bfa5;
+            --error: #ff5252;
+            --text: #ffffff;
+            --max-w: 500px; 
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0f0f0f; 
+            color: var(--text);
+            margin: 0; padding: 0;
+            display: flex; justify-content: center; min-height: 100vh;
+        }
+
+        #app-container {
+            width: 100%; max-width: var(--max-w);
+            background-color: var(--bg); position: relative;
+            min-height: 100vh; padding-bottom: 90px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        /* LOADING SCREEN */
+        #loader {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: var(--bg); z-index: 999;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid #333;
+            border-top: 4px solid var(--primary); border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* UI COMPONENTS */
+        .nav-bar {
+            position: fixed; bottom: 0; width: 100%; max-width: var(--max-w);
+            height: 65px; background: var(--surface);
+            display: flex; justify-content: space-around; align-items: center;
+            border-top: 1px solid #333; z-index: 100;
+        }
+        .nav-item { flex: 1; text-align: center; padding: 5px; color: #777; font-size: 10px; cursor: pointer; }
+        .nav-item.active { color: var(--primary); transform: scale(1.1); }
+        .nav-icon { font-size: 24px; display: block; margin-bottom: 2px; }
+
+        .section { display: none; padding: 15px; animation: fadeIn 0.3s; }
+        .section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .card {
+            background: var(--surface); border-radius: 14px; padding: 16px;
+            margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        /* HEADER & GRADES */
+        .subj-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .subj-name { font-size: 17px; font-weight: 600; }
+        .subj-avg { font-size: 20px; font-weight: 700; color: var(--primary); }
+        
+        .grades-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+        .grade-chip {
+            width: 32px; height: 32px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 16px; color: #000; cursor: pointer;
+        }
+        .val-2 { background: var(--error); color: white; }
+        .val-3 { background: #ffab00; }
+        .val-4 { background: #76ff03; }
+        .val-5 { background: #00e676; }
+        .val-0 { background: #555; color: white; border: 1px solid #777; }
+
+        .btn {
+            background: #333; color: white; border: none; padding: 12px;
+            border-radius: 10px; font-weight: 500; font-size: 14px;
+            width: 100%; cursor: pointer; margin-top: 5px;
+        }
+        .btn:active { background: var(--primary); }
+        .btn-danger { color: var(--error); background: rgba(255, 82, 82, 0.1); }
+
+        .floating-fab {
+            position: fixed; bottom: 80px; right: calc(50% - var(--max-w)/2 + 20px);
+            width: 56px; height: 56px; border-radius: 50%;
+            background: var(--primary); color: white; font-size: 30px;
+            border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 90;
+        }
+        @media (max-width: 500px) { .floating-fab { right: 20px; } }
+
+        /* MODALS */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 200; display: none;
+            justify-content: center; align-items: flex-end;
+        }
+        .modal {
+            background: #1e1e1e; width: 100%; max-width: var(--max-w);
+            border-radius: 20px 20px 0 0; padding: 25px; animation: slideUp 0.3s;
+        }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        
+        .num-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 15px; }
+        .num-btn { height: 50px; border-radius: 12px; background: #333; border: none; color: white; font-size: 18px; font-weight: bold; }
+        
+        /* SYNC STATUS */
+        #sync-status {
+            text-align: center; font-size: 12px; color: #666; margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="loader">
+    <div class="spinner"></div>
+    <div style="color:#888">Синхронизация с Telegram...</div>
+</div>
+
+<div id="app-container">
+    
+    <!-- HOME -->
+    <div id="sec-home" class="section active">
+        <div id="subjects-container"></div>
+        <div id="sync-status">Облако подключено ●</div>
+    </div>
+
+    <!-- SETTINGS (Simplified for Cloud) -->
+    <div id="sec-settings" class="section">
+        <h2>Меню</h2>
+        <div class="card">
+            <h3>Управление данными</h3>
+            <p style="font-size:12px; color:#888">Данные хранятся в облаке Telegram и доступны на всех устройствах.</p>
+            <button class="btn" onclick="forceSync()">🔄 Принудительно обновить</button>
+            <button class="btn btn-danger" onclick="wipeCloud()">🗑 Удалить все из облака</button>
+        </div>
+    </div>
+
+    <button class="floating-fab" id="fab-add" onclick="addSubject()">+</button>
+
+    <!-- NAVBAR -->
+    <div class="nav-bar">
+        <div class="nav-item active" onclick="nav('home', this)"><span class="nav-icon">📚</span>Уроки</div>
+        <div class="nav-item" onclick="nav('settings', this)"><span class="nav-icon">⚙️</span>Меню</div>
+    </div>
+</div>
+
+<!-- MODAL ADD GRADE -->
+<div class="modal-overlay" id="m-grade" onclick="if(event.target===this) closeM('m-grade')">
+    <div class="modal">
+        <h3>Оценка</h3>
+        <div class="num-grid">
+            <button class="num-btn val-2" onclick="saveGrade(2)">2</button>
+            <button class="num-btn val-3" onclick="saveGrade(3)">3</button>
+            <button class="num-btn val-4" onclick="saveGrade(4)">4</button>
+            <button class="num-btn val-5" onclick="saveGrade(5)">5</button>
+            <button class="num-btn val-0" onclick="saveGrade(0)">●</button>
+        </div>
+        <button class="btn" style="background:transparent" onclick="closeM('m-grade')">Отмена</button>
+    </div>
+</div>
+
+<script>
+    // Инициализация Telegram WebApp
+    const tg = window.Telegram.WebApp;
+    tg.expand(); // Раскрыть на весь экран
+
+    let db = { subjects: [] };
+    let curSubjId = null;
+
+    // --- CLOUD STORAGE LOGIC ---
+
+    // Загрузка данных при старте
+    function initApp() {
+        console.log("Запрос данных из облака...");
+        tg.CloudStorage.getItem('school_db_v4', (err, value) => {
+            const loader = document.getElementById('loader');
+            if (err) {
+                alert("Ошибка облака: " + err);
+                loader.style.display = 'none';
+                return;
+            }
+            
+            if (value) {
+                try {
+                    db = JSON.parse(value);
+                    console.log("Данные получены");
+                } catch (e) {
+                    console.error("Ошибка парсинга JSON");
+                }
+            } else {
+                console.log("Облако пустое, начинаем с нуля");
+            }
+            
+            renderHome();
+            loader.style.display = 'none';
+        });
+    }
+
+    // Сохранение данных в облако
+    function saveToCloud() {
+        const jsonStr = JSON.stringify(db);
+        document.getElementById('sync-status').innerText = "Сохранение...";
+        
+        tg.CloudStorage.setItem('school_db_v4', jsonStr, (err, stored) => {
+            if (err) {
+                document.getElementById('sync-status').innerText = "Ошибка сохранения ❌";
+                alert("Не удалось сохранить в облако!");
+            } else {
+                if (stored) {
+                    document.getElementById('sync-status').innerText = "Сохранено в облако ✅";
+                    setTimeout(() => {
+                         document.getElementById('sync-status').innerText = "Облако подключено ●";
+                    }, 2000);
+                }
+            }
+        });
+    }
+
+    // Принудительное обновление (если открыл на ПК, а потом изменил на телефоне)
+    function forceSync() {
+        location.reload();
+    }
+    
+    function wipeCloud() {
+        if(confirm("Удалить ВСЕ данные из облака навсегда?")) {
+            tg.CloudStorage.removeItem('school_db_v4', (err, deleted) => {
+                if(deleted) location.reload();
+            });
+        }
+    }
+
+    // --- APP LOGIC ---
+
+    function addSubject() {
+        const n = prompt("Название предмета:");
+        if(!n) return;
+        db.subjects.push({ id: Date.now(), name: n, grades: [] });
+        saveToCloud();
+        renderHome();
+    }
+
+    function renderHome() {
+        const c = document.getElementById('subjects-container');
+        c.innerHTML = "";
+        
+        if(db.subjects.length === 0) {
+            c.innerHTML = "<div style='text-align:center; padding:40px; color:#555'>Список пуст.<br>Нажми + чтобы добавить предмет.</div>";
+            return;
+        }
+
+        db.subjects.sort((a,b) => a.id - b.id).forEach(s => {
+            // Расчет
+            const realGrades = s.grades.filter(g => g.v > 0);
+            const sum = realGrades.reduce((a,b)=>a+b.v, 0);
+            const avg = realGrades.length ? (sum / realGrades.length).toFixed(2) : 0;
+            
+            // Долги
+            const dots = s.grades.filter(g => g.v === 0).length;
+            const alert = dots > 0 ? `<span style="color:var(--error); font-size:12px; margin-left:10px;">Долгов: ${dots}</span>` : "";
+
+            // Отрисовка оценок
+            let gHtml = s.grades.map((g, idx) => {
+                const txt = g.v === 0 ? "●" : g.v;
+                return `<div class="grade-chip val-${g.v}" onclick="delGrade(${s.id}, ${idx})">${txt}</div>`;
+            }).join('');
+
+            c.innerHTML += `
+            <div class="card">
+                <div class="subj-header">
+                    <div class="subj-name">${s.name} ${alert}</div>
+                    <div class="subj-avg">${avg || "-"}</div>
+                </div>
+                <div class="grades-grid">${gHtml}</div>
+                <button class="btn" onclick="openAdd(${s.id})" style="font-size:12px; padding:8px;">+ Оценка</button>
+                <button class="btn btn-danger" onclick="delSubj(${s.id})" style="font-size:12px; padding:8px; margin-top:5px;">Удалить предмет</button>
+            </div>`;
+        });
+    }
+
+    function openAdd(id) { curSubjId = id; document.getElementById('m-grade').style.display='flex'; }
+    
+    function saveGrade(val) {
+        const s = db.subjects.find(x=>x.id===curSubjId);
+        s.grades.push({ v: val, d: Date.now() }); // Просто храним значение и дату
+        saveToCloud();
+        renderHome();
+        closeM('m-grade');
+    }
+
+    function delGrade(sid, idx) {
+        if(confirm("Удалить эту оценку?")) {
+            const s = db.subjects.find(x=>x.id===sid);
+            s.grades.splice(idx, 1);
+            saveToCloud();
+            renderHome();
+        }
+    }
+
+    function delSubj(id) {
+        if(confirm("Удалить предмет целиком?")) {
+            db.subjects = db.subjects.filter(x => x.id !== id);
+            saveToCloud();
+            renderHome();
+        }
+    }
+
+    function nav(id, el) {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById('sec-'+id).classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        el.classList.add('active');
+        document.getElementById('fab-add').style.display = (id==='home')?'flex':'none';
+    }
+
+    function closeM(id) { document.getElementById(id).style.display='none'; }
+
+    // ЗАПУСК
+    // Ждем полной загрузки API телеграма
+    if (window.Telegram.WebApp.initData) {
+        initApp();
+    } else {
+        // Если открыто не в телеграме, предупреждаем
+        alert("Это приложение работает только внутри Telegram! Открой его через бота.");
+        document.getElementById('loader').innerHTML = "Откройте в Telegram";
+    }
+
+</script>
+</body>
+</html>
